@@ -1,0 +1,14 @@
+package name.brijest.sages.model.objects
+
+
+import name.brijest.sages.model.quantities.IntNum
+
+
+
+/**
+ * An object that has a unique look (guise) property.
+ */
+abstract class GuisableObject extends Object {
+  define("Guise", "Index of the particular look of this object.", new IntNum)
+  define("Total guises", "Total number of the guises of this object.", new IntNum)
+}

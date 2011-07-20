@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+	<classpathentry kind="src" path="src/model"/>
+	<classpathentry kind="src" path="src/gui/scala"/>
+	<classpathentry kind="src" path="src/tests/model"/>
+	<classpathentry kind="src" path="src/elements"/>
+	<classpathentry kind="con" path="ch.epfl.lamp.sdt.launching.SCALA_CONTAINER"/>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
+	<classpathentry kind="lib" path="libs/junit-4.5.jar"/>
+	<classpathentry kind="lib" path="libs/scalatest-0.9.5.jar"/>
+	<classpathentry kind="lib" path="libs/javapng-2.0.jar"/>
+	<classpathentry kind="lib" path="libs/commons-io-1.4.jar"/>
+	<classpathentry kind="lib" path="libs/mp3spi1.9.4.jar"/>
+	<classpathentry kind="output" path="bin"/>
+</classpath>

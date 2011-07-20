@@ -1,0 +1,25 @@
+package name.brijest.sages.model.objects
+
+
+
+
+
+
+
+/**
+ * Adds some predefined objects to the dynamic loader.
+ */
+trait ObjectHolder {
+  val objpal = new ObjectPalette
+  
+  // bootstrap certain objects
+  objpal.registerObject(classOf[Sage])
+}
+
+
+
+
+
+
+
+

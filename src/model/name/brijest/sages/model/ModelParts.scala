@@ -1,0 +1,783 @@
+package name.brijest.sages.model
+
+
+/*****************************************************************
+ * 
+ * This file describes the essential model objects and classes.
+ * 
+ * @author Aleksandar Prokopec
+ * 
+ *****************************************************************/
+
+
+import scala.collection._
+
+import name.brijest.sages.model.quantities._
+import name.brijest.sages.common.collections.Neighbourhood
+
+
+/**
+ * Represents a question. Each question has a text, some sort of type that
+ * describes the answer input method and each question may validate the answer.<br/>
+ */
+abstract class Question {
+  abstract class Type
+  case class TextInput() extends Type
+  case class SingleChoice(answers: List[String]) extends Type
+  case class MultiChoice(answers: List[String]) extends Type
+  
+  /**
+   * Returns the question's answer input type along with the relevant information.
+   */
+  def getQuestionType: Type
+  /**
+   * Validates the answer, returning true if the answer string is correct and false otherwise.
+   */
+  def validateAnswer(answer: String): Boolean
+  def equals(other: Any): Boolean
+  def hashCode: Int
+}
+
+/**
+ * Category is an abstract factory used to acquire questions.
+ * Each category object must have an empty ctor. Each category empty ctor implementation
+ * should not be computationally intensive.
+ */
+abstract class Category {
+  /**
+   * A unique name - should not be null.
+   */
+  def name: String
+  /**
+   * A description - never null.
+   */
+  def description: String
+  /**
+   * Acquires a random question.
+   */
+  def acquireQuestion: Question
+  def equals(other: Any): Boolean
+  def hashCode: Int
+}
+
+/**
+ * Factory used to register and instantiate categories by their name.
+ */
+final class CategoryFactory {
+  val catmap = new scala.collection.mutable.HashMap[String, Class[_]]
+  
+  def registerCategory(cls: Class[_]) = {
+    val category = cls.newInstance.asInstanceOf[Category]
+    if (catmap.contains(category.name))
+      throw new IllegalArgumentException("Category " + category.name + " already exists.");
+    catmap.put(category.name, cls)
+  }
+  def registerCategory[T <: Category](cat: T) = {
+    if (catmap.contains(cat.name))
+      throw new IllegalArgumentException("Category " + cat.name + " already exists.");
+    catmap.put(cat.name, cat.getClass)
+  }
+  def createCategory(name: String) = catmap(name).newInstance
+}
+
+/**
+ * Companion object for class Player. Allows deserialization from XML.
+ */
+object Player {
+  def fromXML(node: scala.xml.Node) = {
+    val d = Properties.fromXML(node.child(1))
+    new Player(mutable.LinkedHashMap() ++ d.properties)
+  }
+  def defaultProperties = {
+    collection.mutable.LinkedHashMap[String, Quantity]() ++ List[Quantity](
+      new MutableQuantity("Name", "A unique name for a player.", new Text),
+      new MutableQuantity("Visibility", "Parts of the map visible to player.", new Bitmap),
+      new MutableQuantity("Hidden revealed", "Hidden location visibility.", new DecNum),
+      new MutableQuantity("Resources", "Materials and valuables.", new Composition(Misc.resources)),
+      new MutableQuantity("Colour", "The colour of the player.", new Colour),
+      new MutableQuantity("Days homeless", "Number of days player was without a town.", new IntNum),
+      new MutableQuantity("Index", "The ordinal number of the player.", new IntNum)
+    ).map(x => (x.name, x))
+  }
+}
+
+/**
+ * Describes all the important information about a player.
+ */
+final class Player private (propmap: mutable.LinkedHashMap[String, Quantity]) extends Properties {
+  val properties = propmap
+  
+  def this() = this(Player.defaultProperties)
+  def name = properties("Name").value.asInstanceOf[Text].txt
+  def daysHomeless = properties("Days homeless").value.asInstanceOf[IntNum].num
+  def index = properties("Index").value.asInstanceOf[IntNum].num
+  def colour = properties("Colour").value.asInstanceOf[Colour]
+  def visibility = properties("Visibility").value.asInstanceOf[Bitmap]
+  def hiddenRevealed = properties("Hidden revealed").value.asInstanceOf[DecNum].num
+  
+  override def toXML = {
+    <player>
+      {super.toXML}
+    </player>
+  }
+  override def fromXML(node: scala.xml.Node) = Player.fromXML(node)
+  override def equals(other: Any) = other match {
+    case that: Player => properties.equals(that.properties)
+    case _ => false
+  }
+}
+
+/**
+ * Describes terrain type class.<br/>
+ * Each terrain must have an empty ctor.<br/>
+ * Each implementation must define classes of immutable objects.
+ */
+abstract class Terrain {
+  /**
+   * A unique name for the terrain type.
+   */
+  def name: String
+  /**
+   * A unique index of the terrain.
+   */
+  def index: Int
+  /**
+   * Movement cost for the terrain.
+   * 
+   * @return
+   * A positive number describing the movement cost.
+   */
+  def movementCost: Int
+  /**
+   * A list of possible categories that may appear on this terrain.
+   * Never an empty list.
+   */
+  def categories: List[Category]
+  /**
+   * Returns one category for this terrain type.
+   */
+  def acquireCategory: Category
+  /**
+   * Each terraing may have several subtypes - each of which has it's own subindex.
+   * At least one subindex must exist, and this subindex must be 0.
+   */
+  def subindices: Set[Int]
+  /**
+   * Each terrain may have possible neighbour terrain types on each of their eight sides.
+   */
+  def neighbours: Neighbourhood[Set[(Terrain, Int)]]
+  /**
+   * Can be walked on - can a sage or a ship move on this terrain.
+   */
+  def walkable: Boolean
+  def colour: java.awt.Color
+  
+  override def equals(other: Any) = other match {
+    case that: Terrain => name == that.name
+    case _ => false
+  }
+  override def hashCode = name.hashCode
+}
+
+/**
+ * Encapsulates information about a single slot of the terrain.
+ */
+final class TerrainSlot(val subindex: Int, val terrain: Terrain) {
+  override def equals(other: Any) = other match {
+    case that: TerrainSlot => subindex == that.subindex && terrain == that.terrain
+    case _ => false
+  }
+  override def hashCode = subindex << 16 + terrain.hashCode
+}
+
+/**
+ * Dictionary for various terrains.
+ */
+final class TerrainPalette {
+  val namemap = scala.collection.mutable.Map[String, Terrain]()
+  val indexmap = scala.collection.mutable.Map[Int, Terrain]()
+  
+  def registerTerrain(t: Terrain) {
+    if (namemap contains t.name)
+      throw new IllegalArgumentException("Terrain name " + t.name + " already exists!");
+    if (indexmap contains t.index)
+      throw new IllegalArgumentException("Terrain index " + t.index + " already exists!");
+    namemap.put(t.name, t)
+    indexmap.put(t.index, t)
+  }
+  def registerTerrain(tc: Class[_]) { registerTerrain(tc.newInstance.asInstanceOf[Terrain]) }
+  def getTerrain(name: String) = namemap(name)
+  def getTerrain(index: Int) = indexmap(index)
+  def createSlot(index: Int, subindex: Int) = new TerrainSlot(subindex, getTerrain(index))
+  def defaultTerrain = {
+    namemap.elements.next._2
+  }
+  def defaultTerrainSlot = {
+    val t = defaultTerrain
+    new TerrainSlot(t.subindices.elements.next, t)
+  }
+}
+
+/**
+ * TerrainMap companion object.
+ */
+object TerrainMap {
+  private def defaultTerrain(size: Int, palette: TerrainPalette) = {
+    val terrain = new Array[TerrainSlot](size * size)
+    for (x <- 0 until size)
+      for (y <- 0 until size) {
+        terrain(x * size + y) = palette.defaultTerrainSlot
+      }
+    terrain
+  }
+  def fromXML(node: scala.xml.Node, palette: TerrainPalette) = {
+    val size = Integer.parseInt((node \ "size")(0).text)
+    val tmap = new TerrainMap(size, palette)
+    
+    // load terrain
+    val terrainarr = (node \ "terrain")(0).text.split(",")
+    var i = 0
+    for (slotstr <- terrainarr) {
+      val slotarr = slotstr.split("-")
+      tmap.terrain(i) = palette.createSlot(Integer.parseInt(slotarr(0)), Integer.parseInt(slotarr(1)))
+      i = i + 1
+    }
+    
+    // load digs
+    val digstr = (node \ "digs")(0).text
+    i = 0
+    for (d <- digstr) {
+      d match {
+        case '0' => tmap.digs(i) = false
+        case '1' => tmap.digs(i) = true
+      }
+      i = i + 1
+    }
+    
+    tmap
+  }
+}
+
+/**
+ * Holds all information about the terrain of the map.
+ */
+final class TerrainMap(val size: Int, val palette: TerrainPalette) {
+  private val terrain = TerrainMap.defaultTerrain(size, palette)
+  private val digs = new mutable.BitSet
+  
+  def slot(x: Int, y: Int) = if (x >= 0 && x < size && y >= 0 && y < size) terrain(x * size + y) else null
+  def slot(t: (Int, Int)): TerrainSlot = slot(t._1, t._2)
+  def setSlot(x: Int, y: Int, slot: TerrainSlot) = terrain(x * size + y) = slot
+  def setSlot(p: (Int, Int), slot: TerrainSlot): Unit = setSlot(p._1, p._2, slot)
+  def digged(x: Int, y: Int) = if (x >= 0 && x < size && y >= 0 && y < size) digs.contains(x * size + y)
+                               else false
+  def digged(t: (Int, Int)): Boolean = digged(t._1, t._2)
+  def setDigged(t: (Int, Int)): Unit = setDigged(t._1, t._2)
+  def setDigged(x: Int, y: Int) = digs(x * size + y) = true
+  def resetDigged(t: (Int, Int)): Unit = resetDigged(t._1, t._2)
+  def resetDigged(x: Int, y: Int) = digs(x * size + y) = false
+  def walkable(t: (Int, Int)): Boolean = walkable(t._1, t._2)
+  def walkable(x: Int, y: Int) = slot(x, y).terrain.walkable
+  
+  def toXML = {
+    <terrainmap>
+      <size>{size}</size>
+      {
+        val sb = new StringBuilder
+        var first = true
+        for (x <- 0 until size)
+          for (y <- 0 until size) {
+            val t = slot(x, y)
+            if (first) first = false else sb.append(",")
+            sb.append(t.terrain.index + "-" + t.subindex)
+          }
+        <terrain>{sb}</terrain>
+      }
+      {
+        val sb = new StringBuilder
+        for (x <- 0 until size)
+          for (y <- 0 until size) {
+            if (digs(x * size + y)) sb append "1"
+            else sb append "0"
+          }
+        <digs>{sb}</digs>
+      }
+    </terrainmap>
+  }
+  override def equals(other: Any) = other match {
+    case that: TerrainMap => that.size == size && terrain.deepEquals(that.terrain) && that.digs == digs
+    case _ => false
+  }
+  override def hashCode = size << 16 + terrain.hashCode << 8 + digs.hashCode 
+}
+
+/**
+ * Quest class describes the quest type - it can check whether game objective has been fulfilled, it can
+ * end the game, as well as perform some action on the model.<br/>
+ * Any quest class must have an empty ctor.
+ */
+abstract class Quest(val properties: Properties) extends Observer {
+  /**
+   * A unique name for the quest type. Each class subclassing Quest must provide
+   * a unique name. A name cannot be null.
+   */
+  def name: String
+  /**
+   * A description of the quest. Must not be null.
+   */
+  def description: String
+  def equals(other: Any): Boolean
+  def hashCode: Int
+  def toXML = {
+    <quest>
+      {properties.toXML}
+    </quest>
+  }
+  def fromXML(node: scala.xml.Node): Quest
+}
+
+/**
+ * A default implementation of the quest. This quest never ends, nor does it have a point.
+ */
+class AimlessQuest(props: Properties) extends Quest(props) {
+  def this() = this(Properties.empty)
+  
+  def name = "Aimless quest"
+  def description = "There is nothing you can actually do in this quest to end the game."
+  def onEvent(e: Event) {}
+  def events = Nil
+  
+  override def fromXML(node: scala.xml.Node) = {
+    val props = Properties.fromXML(node.child(1))
+    new AimlessQuest(props)
+  }
+  override def equals(other: Any) = other match {
+    case that: AimlessQuest => true
+    case _ => false
+  }
+  override def hashCode = 49314893
+}
+
+final class QuestFactory {
+  private val qmap = mutable.Map[String, Class[_]]()
+  def registerQuest(qcls: Class[_]) {
+    val nm = qcls.newInstance.asInstanceOf[Quest].name
+    if (qmap contains nm) throw new IllegalArgumentException("Quest " + nm +  " already registered!")
+    else qmap.put(nm, qcls)
+  }
+  def createQuestObject(nm: String) = qmap(nm).newInstance.asInstanceOf[Quest]
+}
+
+/**
+ * State class describes the current state of the game. The state is important because
+ * it describes the set of actions over the model that are currently available.
+ */
+abstract class State(val depot: Depot) {
+  /**
+   * A unique name for the state. Each class subclassing State must provide
+   * a unique name. A name cannot be null.
+   */
+  def name: String
+  /**
+   * A description of the state.
+   */
+  def description: String
+  /**
+   * Returns a set of players that can perform actions in this state.
+   * Never null.
+   */
+  def activePlayers: Set[Player]
+  /**
+   * Returns whether or not the model may be persisted while in this state.
+   */
+  def saveable: Boolean
+  /**
+   * Returns whether or not the given execution may be performed in this state.
+   * An execution does something to the model - the state allows or denies an
+   * execution.
+   */
+  def validateExecution(e: Execution): Boolean
+  def toXML = {
+    <state>
+      {depot.toXML}
+    </state>
+  }
+  def fromXML(node: scala.xml.Node): State
+  def equals(other: Any): Boolean
+  def hashCode: Int
+}
+
+/**
+ * Describes an object. Each object must have an empty ctor.<br/>
+ * A class subclassing Object must be immutable.<br/>
+ * Properties of an object must be immutable and serve to provide
+ * default values. Object's properties are thus not MutableQuantities,
+ * they are only Quantities.
+ */
+abstract class Object private (pm: mutable.LinkedHashMap[String, Quantity],
+                               am: mutable.LinkedHashMap[String, Action])
+extends Depot with Observer {
+  protected val propertymap = pm
+  protected val actionmap = am
+  protected def define(q: MutableQuantity) = propertymap.put(q.name, q)
+  protected def define(a: Action) = actionmap.put(a.name, a)
+  
+  def this() = this(new mutable.LinkedHashMap[String, Quantity](), new mutable.LinkedHashMap[String, Action]())
+  
+  def properties = propertymap
+  def actions = actionmap
+  
+  private def min(z: Int, w: Int) = if (z < w) z else w
+  private def max(z: Int, w: Int) = if (z > w) z else w
+  /**
+   * Each object must return a unique object name (provided per class basis).
+   */
+  def objectname: String
+  /** A non-unique name used in GUI. */
+  def nicename: String
+  def owner = properties.get("Owner") match {
+    case Some(q) => q.asInteger
+    case None => -1
+  }
+  def size: (Int, Int)
+  def occupied = for (x <- 0 until size._1; y <- 0 until size._2) yield (x, y)
+  def westmost = 0
+  def eastmost = size._1 - 1
+  def northmost = 0
+  def southmost = size._2 - 1
+  /**
+   * Returns a list of coordinates that are interactive for this object. Each
+   * interactive slot must be occupied by the object (that is, it must be within
+   * this object's occupied list).
+   */
+  def interactive: List[(Int, Int)]
+  def interact(thisloc: (Int, Int), that: Object, thatloc: (Int, Int))
+  override def equals(other: Any) = other match {
+    case that: Object => this.objectname == that.objectname && this.equalDepot(that)
+    case _ => false
+  }
+  override def hashCode = super.hashCode
+  override def fromXML(node: xml.Node) = {
+    val d = Depot.fromXML((node \ "depot")(0))
+    val obj = this.getClass.newInstance.asInstanceOf[Object]
+    for ((k, v) <- d.properties) obj.prop(k).asInstanceOf[MutableQuantity].value = v.value
+    obj
+  }
+}
+
+object Instance {
+  def fromXML(node: scala.xml.Node) = {
+    val ind = Integer.parseInt((node \ "index")(0).text)
+    val proto = Class.forName((node \ "proto")(0).text, true, DynamicLoader).newInstance.asInstanceOf[Object]
+    val obj = proto.fromXML(node.child(5)).asInstanceOf[Object]
+    new Instance(ind, obj)
+  }
+}
+
+/**
+ * Holds information about an object instance. Each object instance is mutable, but holds
+ * a reference to it's immutable 'Object' object which serves as a prototype.<br/>
+ */
+final class Instance(val index: Int, val prototype: Object) {
+  def properties = prototype.properties
+  def actions = prototype.actions
+  def objectname = prototype.objectname
+  def size = prototype.size
+  def interactive = prototype.interactive
+  def prop(name: String) = prototype.prop(name)
+  
+  def toXML = {
+    <instance>
+      <index>{index}</index>
+      <proto>{prototype.getClass.getName}</proto>
+      <obj>{prototype.toXML}</obj>
+    </instance>
+  }
+  def fromXML(node: scala.xml.Node) = Instance.fromXML(node)
+  override def equals(other: Any) = other match {
+    case that: Instance => that.index == index && that.prototype == prototype
+    case _ => false
+  }
+  override def hashCode = index
+  override def toString = "Instance[" + index + ", " + prototype + "]"
+}
+
+object InstanceMap {
+  def fromXML(node: scala.xml.Node) = {
+    val imap = new InstanceMap((node \ "size")(0).text.toInt)
+    for (n <- node \ "inst") {
+      val pos = (n.attributes("x").text.toInt, n.attributes("y").text.toInt)
+      val inst = Instance fromXML n.child(1)
+      imap.put(pos, inst)
+    }
+    imap
+  }
+}
+
+/**
+ * Holds information about all the objects on the map.
+ */
+final class InstanceMap(val mapSize: Int) extends Iterable[((Int, Int), Instance)] {
+  private val instmap = mutable.Map[(Int, Int), Instance]()
+  private val occmap = mutable.Map[(Int, Int), (Int, Int)]()
+  private val indexmap = mutable.Map[Int, (Int, Int)]()
+  private val instlocs = mutable.Map[Instance, (Int, Int)]()
+  
+  def iterator = instmap.iterator
+  /**
+   * Returns whether or not the map contains an instance with the specified index.
+   */
+  def hasIndex(ind: Int) = indexmap.contains(ind)
+  /** Returns the index of the instance at the specified location, or -1 if there is none. */
+  def getIndexAt(t: (Int, Int)) = occmap.get(t) match {
+    case Some(masterslot) => instmap(masterslot).index
+    case None => -1
+  }
+  /** Gets the instance by index. Null if there is no such index. */
+  def getByIndex(index: Int) = if (hasIndex(index)) instmap(indexmap(index)) else null
+  /**
+   * Returns whether or not the map contains an instance.
+   */
+  def contains(inst: Instance) = instlocs.contains(inst)
+  /**
+   * Returns the location for the specified instance, throws an exception
+   * if it does not exist.
+   */
+  def getLocationFor(inst: Instance) = instlocs(inst)
+  /**
+   * Checks whether or not the slot is occupied by an object.
+   */
+  def occupied(t: (Int, Int)) = occmap.contains(t)
+  /**
+   * Checks whether or not the slot is occupied by an object.
+   */
+  def occupied(x: Int, y: Int) = occmap.contains(x, y)
+  /**
+   * Gets an object at the specified location if there is one, or null if there isn't.
+   */
+  def apply(t: (Int, Int)) = if (!occmap.contains(t)) null else instmap(occmap(t))
+  /**
+   * Checks whether the slot is interactive.
+   */
+  def interactive(t: (Int, Int)) = getInteractive(t) != null
+  /**
+   * Checks whether the slot is interactive.
+   */
+  def interactive(x: Int, y: Int) = getInteractive(x, y) != null
+  /**
+   * Gets the object that is interactive at the specified slot if there is such an
+   * object, otherwise returns null.
+   */
+  def getInteractive(t: (Int, Int)) = {
+    if (!occmap.contains(t)) null
+    val start = occmap(t)
+    val offset = (t._1 - start._1, t._2 - start._2)
+    val inst = instmap(start)
+    if (inst.prototype.interactive.contains(offset)) inst else null
+  }
+  /**
+   * Gets the object that is interactive at the specified slot if there is such an
+   * object, otherwise returns null.
+   */
+  def getInteractive(x: Int, y: Int): Instance = getInteractive((x, y))
+  def placementProblematicSlots(x: Int, y: Int, inst: Instance) = 
+    for (occ <- inst.prototype.occupied if occupied(x + occ._1, y + occ._2)) yield occ
+  /**
+   * Checks if object could be placed at the specified location.
+   */
+  def checkFree(t: (Int, Int), inst: Instance): Boolean = checkFree(t._1, t._2, inst)
+  /**
+   * Checks if object could be placed at the specified location.
+   */
+  def checkFree(x: Int, y: Int, inst: Instance): Boolean = {
+    for (slot <- placementProblematicSlots(x, y, inst))
+      if (getIndexAt(x + slot._1, y + slot._2) != inst.index) return false
+    true
+  }
+  private def withinBounds(p: (Int, Int)) = p._1 >= 0 && p._2 >= 0 && p._1 < mapSize && p._2 < mapSize
+  /**
+   * Puts an object into the map if the specified location and the additional
+   * needed slots are free. If not, throws an exception.
+   * 
+   * @throws IllegalArgumentException
+   * If the needed locations are not free, that is, method checkFree returns false.<br/>
+   * Also, in case an instance with the specified index exists.
+   */
+  def put(p: (Int, Int), inst: Instance) {
+    if (!checkFree(p, inst))
+      throw new IllegalArgumentException("Cannot place instance at " + p + ", there are other objects around!")
+    if (hasIndex(inst.index))
+      throw new IllegalArgumentException("Already contains object with index " + inst.index)
+    require(withinBounds(p), "Must be within size - " + p + ", size is: " + mapSize)
+    
+    instmap.put(p, inst)
+    instlocs.put(inst, p)
+    indexmap.put(inst.index, p)
+    for (occ <- inst.prototype.occupied) {
+      val plc = (p._1 + occ._1, p._2 + occ._2)
+      require(withinBounds(plc), "Every object slot must be within the map.")
+      occmap.put(plc, p)
+    }
+  }
+  /**
+   * Puts an object into the map if the specified location and the additional
+   * needed slots are free.
+   * 
+   * @throws IllegalArgumentException
+   * If the needed locations are not free, that is, method checkFree returns false.
+   * Also, in case an instance with the specified index exists.
+   */
+  def put(x: Int, y: Int, inst: Instance): Unit = put((x, y), inst)
+  /**
+   * Removes the instance from the map if it exists.
+   * 
+   * @throws IllegalArgumentException
+   * If the instance does not exist in the map.
+   */
+  def remove(inst: Instance): Unit = if (contains(inst)) removePlacedAt(instlocs(inst)) else
+    throw new IllegalArgumentException("Instance " + inst + " does not exist.")
+  /**
+   * Removes anything occupying specified location.
+   * 
+   * @throws IllegalArgumentException
+   * If nothing is occupying the specified location.
+   */
+  def removeAt(p: (Int, Int)) = if (occupied(p)) removePlacedAt(occmap(p)) else
+    throw new IllegalArgumentException("Nothing occupies " + p + "!")
+  /**
+   * Removes anything occupying specified location.
+   * 
+   * @throws IllegalArgumentException
+   * If nothing is occupying the specified location.
+   */
+  def removeAt(x: Int, y: Int): Unit = removeAt((x, y))
+  /**
+   * Removes an instance from the map if it was placed at the specified location.
+   * The element may not actually occupy this location.
+   * 
+   * @throws IllegalArgumentException
+   * If an instance was not placed in the map at the specified location.
+   */
+  def removePlacedAt(p: (Int, Int)) {
+    if (!instmap.contains(p)) throw new IllegalArgumentException("Nothing placed at " + p + "!")
+    
+    val inst = instmap(p)
+    indexmap.removeKey(inst.index)
+    instlocs.removeKey(inst)
+    instmap.removeKey(p)
+    for (occ <- inst.prototype.occupied) occmap.removeKey(p._1 + occ._1, p._2 + occ._2)
+  }
+  /**
+   * Removes an instance from the map if it was placed at the specified location.
+   * The element may not actually occupy this location.
+   * 
+   * @throws IllegalArgumentException
+   * If an instance was not placed in the map at the specified location.
+   */
+  def removePlacedAt(x: Int, y: Int): Unit = removePlacedAt((x, y))
+  /**
+   * Removes an instance with the specified index from the map if it exists.
+   * 
+   * @throws IllegalArgumentException
+   * If an instance with the specified index does not exist.
+   */
+  def remove(index: Int): Unit = if (hasIndex(index)) removePlacedAt(indexmap(index)) else
+    throw new IllegalArgumentException("No such index (" + index + ") in the map.")
+  def toXML = {
+    <instanceMap>
+      <size>{mapSize}</size>
+      {
+        for (((x, y), inst) <- instmap) yield
+          <inst x={ x.toString } y={ y.toString }>
+            {inst.toXML}
+          </inst>
+      }
+    </instanceMap>
+  }
+  override def equals(other: Any) = other match {
+    case that: InstanceMap => that.mapSize == mapSize && that.instmap == instmap
+    case _ => false
+  }
+  override def hashCode = mapSize << 16 + instmap.hashCode
+  override def toString = instmap + " " + instlocs + " " + occmap + " " + indexmap
+}
+
+/**
+ * This class registers game objects and can create instances of these objects.
+ */
+final class ObjectPalette {
+  val objmap = new collection.mutable.HashMap[String, Object]()
+  
+  def registerObject(o: Object) = {
+    if (objmap.contains(o.objectname)) throw new IllegalArgumentException("Object " + o + " named " +
+    o.objectname + " already exists in map!")
+    objmap.put(o.objectname, o)
+  }
+  def registerObject(cls: Class[_]) { registerObject(cls.newInstance.asInstanceOf[Object]) }
+  def createInstance(index: Int, objectName: String) = {
+    //println(objmap)
+    new Instance(index, objmap(objectName).getClass.newInstance.asInstanceOf[Object])
+  }
+  def createInstance(index: Int, cls: Class[_]) = new Instance(index, cls.newInstance.asInstanceOf[Object])
+}
+
+object Atmosphere {
+  def fromXML(node: xml.Node) = {
+    node match {
+      case <calm/> => Calm()
+      case <aggressive/> => Aggressive()
+      case <happy/> => Happy()
+      case <sad/> => Sad()
+      case <weird/> => Weird()
+    }
+  }
+}
+
+abstract class Atmosphere { def toXML: xml.Node }
+case class Calm() extends Atmosphere { def toXML = <calm/> }
+case class Aggressive() extends Atmosphere { def toXML = <aggressive/> }
+case class Happy() extends Atmosphere { def toXML = <happy/> }
+case class Sad() extends Atmosphere { def toXML = <sad/> }
+case class Weird() extends Atmosphere { def toXML = <weird/> }
+
+/** A companion object with implicit conversion for Executions. */
+object Execution {
+  implicit def wrap(f: Model#Adapter => OpResult) = {
+    new Execution {
+      def apply(adapter: Model#Adapter) = f(adapter)
+    }
+  }
+}
+
+/**
+ * Represents a unit of work on the model. Each state allows certain executions.
+ */
+trait Execution extends Function[Model#Adapter, OpResult] {
+  /**
+   * Applies a unit of work on the model. Note that if the return value
+   * signalizes an unsuccessful execution, then this method should leave
+   * the model in exactly the same state it was before the invocation of
+   * this method.
+   */
+  def apply(model: Model#Adapter): OpResult
+  def equals(other: Any): Boolean
+  def hashCode: Int
+}
+
+/** Hack for ant :) */
+final class ModelParts
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

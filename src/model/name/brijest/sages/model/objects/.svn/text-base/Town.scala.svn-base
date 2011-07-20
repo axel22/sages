@@ -1,0 +1,10 @@
+package name.brijest.sages.model.objects
+
+
+
+
+/**
+ * Common town features.
+ */
+abstract class Town extends Object {
+}

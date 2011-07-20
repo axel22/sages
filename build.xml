@@ -1,0 +1,218 @@
+<?xml version="1.0" encoding="utf-8"?>
+<project name="sages" basedir="." default="all">
+
+	<property file="build.config"/>
+	<property environment="env"/>
+	<property name="scala.home" value="${env.SCALA_HOME}"/>
+	
+	<!-- project dirs -->
+	<property name="source.dir.libs" value="${basedir}/libs"/>
+	<property name="source.dir.model" value="${basedir}/src/model"/>
+	<property name="source.dir.elements" value="${basedir}/src/elements"/>
+	<property name="source.dir.guijava" value="${basedir}/src/gui/java"/>
+	<property name="source.dir.guiscala" value="${basedir}/src/gui/scala"/>
+	
+	<property name="target.dir" value="${basedir}/target"/>
+	<property name="target.dir.classes" value="${target.dir}/classes"/>
+	<property name="target.dir.libs" value="${target.dir}/libs"/>
+	<property name="target.dir.tmp" value="${target.dir}/tmp"/>
+	<property name="target.dir.plugins" value="${target.dir}/plugins"/>
+	<property name="target.dir.plugins.elements" value="${target.dir.plugins}/elements"/>
+	
+	<!-- used jars -->
+	<property name="source.lib.scalalib" value="scala-library.jar"/>
+	<property name="source.lib.scalaswing" value="scala-swing.jar"/>
+	
+	<!-- project output jars -->
+	<property name="target.jar.model" value="sages-model.jar"/>
+	<property name="target.jar.elements" value="sages-basic-elements.jar"/>
+	<property name="target.jar.guiscala" value="sages-gui-scala.jar"/>
+	
+	<!-- detect libraries -->
+	<path id="libs.classpath">
+		<fileset dir="${source.dir.libs}">
+			<include name="**/*.jar"/>
+		</fileset>
+	</path>
+	<pathconvert property="classpath-libs" pathsep=" ">
+		<path refid="libs.classpath"/>
+		<chainedmapper>
+			<flattenmapper/>
+			<globmapper from="*" to="*"/>
+		</chainedmapper>
+	</pathconvert>
+	
+	<!-- targets -->
+	<target name="init">
+		<!-- make dirs -->
+		<mkdir dir="${target.dir}"/>
+		<mkdir dir="${target.dir.classes}"/>
+		<mkdir dir="${target.dir.libs}"/>
+		<mkdir dir="${target.dir.plugins}"/>
+		<mkdir dir="${target.dir.tmp}"/>
+		
+		<!-- init scala compiler -->
+		<property
+		  name="${source.lib.scalalib}"
+		  value="${scala.home}/lib/scala-library.jar"
+		   />
+		<property
+		  name="${source.lib.scalaswing}"
+		  value="${scala.home}/lib/scala-swing.jar"
+		   />
+		<path id="build.classpath">
+			<pathelement location="${scala-library.jar}"/>
+			<pathelement location="${scala-swing.jar}"/>
+		</path>
+		<taskdef resource="scala/tools/ant/antlib.xml">
+			<classpath>
+				<pathelement location="${scala.home}/lib/scala-compiler.jar"/>
+				<pathelement location="${scala-library.jar}"/>
+				<pathelement location="${scala-swing.jar}"/>
+			</classpath>
+		</taskdef>
+	</target>
+	
+	<target name="model" depends="init">
+		<mkdir dir="${target.dir.classes}/model"/>
+		
+		<!-- compile model files -->
+		<fsc srcdir="${source.dir.model}"
+			destdir="${target.dir.classes}/model" classpathref="build.classpath"
+			addparams="-optimise">
+			<classpath refid="libs.classpath" />
+		</fsc>
+		
+		<!-- copy resource files -->
+		<copy todir="${target.dir.classes}/model">
+			<fileset dir="${source.dir.model}">
+				<exclude name="**/*.scala"/>
+			</fileset>
+		</copy>
+		
+		<!-- delete old jar, create new jar -->
+		<delete file="${target.dir.libs}/${target.jar.model}"/>
+		<jar destfile="${target.dir.libs}/${target.jar.model}" basedir="${target.dir.classes}/model">
+			<manifest>
+				<attribute name="Class-Path" value="${source.lib.scalalib} ${classpath-libs}"/>
+			</manifest>
+		</jar>
+	</target>
+	
+	<target name="elements" depends="model, init">
+		<mkdir dir="${target.dir.classes}/elements"/>
+		<mkdir dir="${target.dir.plugins.elements}"/>
+		
+		<!-- compile model files -->
+		<fsc srcdir="${source.dir.elements}"
+		destdir="${target.dir.classes}/elements" classpathref="build.classpath">
+			<classpath path="${target.dir.libs}/${target.jar.model}"/>
+			<classpath refid="libs.classpath" />
+		</fsc>
+		
+		<!-- copy resource files -->
+		<copy todir="${target.dir.classes}/elements">
+			<fileset dir="${source.dir.elements}">
+				<exclude name="**/*.scala"/>
+			</fileset>
+		</copy>
+		
+		<!-- delete old jar, create new jar -->
+		<delete file="${target.dir.libs}/${target.jar.elements}"/>
+		<jar destfile="${target.dir.plugins.elements}/${target.jar.elements}"
+		basedir="${target.dir.classes}/elements">
+			<manifest>
+				<attribute name="Class-Path" value="${target.jar.model} ${source.lib.scalalib} ${classpath-libs}"/>
+			</manifest>
+		</jar>
+	</target>
+	
+	<target name="guiscala" depends="model, init">
+		<mkdir dir="${target.dir.classes}/gui/scala"/>
+		
+		<!-- compile model files -->
+		<fsc srcdir="${source.dir.guiscala}"
+		destdir="${target.dir.classes}/gui/scala" classpathref="build.classpath">
+			<classpath path="${target.dir.libs}/${target.jar.model}"/>
+			<classpath refid="libs.classpath"/>
+		</fsc>
+		
+		<!-- copy resource files -->
+		<copy todir="${target.dir.classes}/gui/scala">
+			<fileset dir="${source.dir.guiscala}">
+				<exclude name="**/*.scala"/>
+			</fileset>
+		</copy>
+		
+		<!-- delete old jar, create new jar -->
+		<delete file="${target.dir.libs}/${target.jar.guiscala}"/>
+		<jar destfile="${target.dir.libs}/${target.jar.guiscala}" basedir="${target.dir.classes}/gui/scala">
+			<manifest>
+				<attribute name="Main-Class" value="name.brijest.sages.gui.main.Main"/>
+				<attribute name="Class-Path" value="${source.lib.scalalib} ${source.lib.scalaswing}
+					${target.jar.model} ${classpath-libs}"/>
+			</manifest>
+		</jar>
+	</target>
+	
+	<target name="copyscalalibs">
+		<copy todir="${target.dir.libs}" flatten="true">
+			<path>
+				<pathelement path="${scala-library.jar}"/>
+				<pathelement path="${scala-swing.jar}"/>
+			</path>
+		</copy>
+	</target>
+	
+	<target name="copylibs" depends="init">
+		<copy todir="${target.dir.libs}">
+			<path refid="libs.classpath"/>
+		</copy>
+	</target>
+
+	<target name="clean">
+		<delete dir="${target.dir}"/>
+	</target>
+	
+	<target name="cleanclasses">
+		<delete includeemptydirs="true">
+			<fileset dir="${target.dir.classes}"/>
+		</delete>
+	</target>
+	
+	<target name="cleanguiclasses">
+		<delete includeemptydirs="true">
+			<fileset dir="${target.dir.classes}/gui"/>
+		</delete>
+	</target>
+	
+	<target name="shutdown" description="Shuts down the scalac.">
+		<scalac shutdown="yes"></scalac>
+	</target>
+	
+	<target name="all" depends="model, elements, guiscala, copyscalalibs, copylibs">
+		<echo message="Detected libs: ${classpath-libs}"></echo>
+		<echo message="Ok, done."></echo>
+	</target>
+	
+</project>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

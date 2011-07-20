@@ -1,0 +1,62 @@
+package name.brijest.sages.model.objects.trees
+
+
+import name.brijest.sages.gui.GuisableObjectDrawer
+import name.brijest.sages.gui.SingleFrameAnimation
+import name.brijest.sages.gui.DrawAdapter
+import name.brijest.sages.gui.ImageCache
+import name.brijest.sages.model.MutableQuantity
+import name.brijest.sages.model.quantities.IntNum
+import name.brijest.sages.model.Event
+
+
+class Willow extends Tree {
+  setProp("Total guises", IntNum(5))
+  def objectname = "Willow"
+  def nicename = "Willow"
+}
+
+object WillowCache extends ImageCache {
+  private val arr = Array(
+    "willow1.png",
+    "willow2.png",
+    "willow3.png",
+    "willow4.png",
+    "willow5.png"
+  )
+  def getAnimation(ind: Int) = singleFrameAni(getClass, arr(ind))
+  def getAnimationLib = singleFrameAniLib(getClass, arr)
+}
+
+class WillowDrawer extends GuisableObjectDrawer(-23, -59, WillowCache.getAnimationLib) {
+  def name = "Willow"
+  def boundingbox = ((-23, -59), (24, 12))
+  def copy = new WillowDrawer
+  def effectDrawerFor(e: Event) = None
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,19 @@
+package name.brijest.sages.gui
+
+
+import name.brijest.sages.controller.Controller
+
+
+/**
+ * Describes a widget abstraction. Each widget has width and height.
+ * UI implementations can mix in extensions of this trait to receive
+ * common functionality.
+ * One must set the controller object for each widget using the appropriate methods.
+ */
+trait Widget {
+  private var ctrl: Controller = null
+  def controller = ctrl
+  def controller_=(c: Controller) = ctrl = c
+  def width: Int
+  def height: Int
+}

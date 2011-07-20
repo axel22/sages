@@ -1,0 +1,35 @@
+package name.brijest.sages.gui.impl.swing
+
+
+import scala.swing._
+import name.brijest.sages.gui._
+
+
+class SwingWidgetFactory extends BoxPanel(Orientation.Horizontal) with WidgetFactory {
+  val canvas = new SwingCanvas
+  val objectDisplay = new SwingObjectDisplay
+  val miniMap = new SwingMiniMap
+  val sageList = new SwingSageList
+  val townList = new SwingTownList
+  
+  contents += new BoxPanel(Orientation.Horizontal) {
+    contents += canvas
+    contents += new BoxPanel(Orientation.Vertical) {
+      contents += miniMap
+      contents += new BoxPanel(Orientation.Horizontal) {
+        contents += sageList
+        contents += townList
+      }
+      contents += objectDisplay
+    }
+  }
+}
+
+
+
+
+
+
+
+
+

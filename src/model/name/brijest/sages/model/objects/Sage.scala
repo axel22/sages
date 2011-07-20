@@ -1,0 +1,102 @@
+package name.brijest.sages.model.objects
+
+
+import name.brijest.sages.gui.EffectDrawer
+import name.brijest.sages.gui.LockObjectDrawer
+import name.brijest.sages.gui.AnimationDrawer
+import name.brijest.sages.gui.AnimatedObjectDrawer
+import name.brijest.sages.gui.DrawAdapter
+import name.brijest.sages.model.InstanceActionInvokedEvent
+import name.brijest.sages.model.objects.images.ImageLoader
+import name.brijest.sages.model.quantities.IntNum
+import name.brijest.sages.model.quantities.Path
+import name.brijest.sages.gui.Fundamental._
+import name.brijest.sages.common.Calculus._
+import name.brijest.sages.common.Direction
+import name.brijest.sages.common.NoDirection
+import name.brijest.sages.model._
+
+
+
+final class Sage extends MoveableObject {
+  prop("MP left").asInstanceOf[MutableQuantity].value = IntNum(400)
+  
+  def objectname = "Sage"
+  def nicename = "Sage"
+  def interactive = List((0, 0))
+  def interact(thisloc: (Int, Int), that: Object, thatloc: (Int, Int)) = null // TODO
+  def size = (1, 1)
+  def events = Nil // TODO
+  def onEvent(e: Event) = null // TODO
+  def movementCost(terrain: Terrain) = terrain.movementCost
+}
+
+
+class SageDrawer extends AnimatedObjectDrawer(-47, -47, ImageLoader.loopedAni("sage_.png", 2))
+with LockObjectDrawer {
+  private class MovementDrawer(completepath: List[(Int, Int)], var targloc: (Int, Int)) extends LockerEffectDrawer {
+    var path = completepath
+    var offset = 0
+    var end = false
+    var lastdir: Direction = NoDirection()
+    
+    override def nextFrame = if (!end && acquireLock) {
+      offset match {
+        case 6 =>
+          offset = 0
+          path = path.tail
+        case _ =>
+          offset += 1
+          if (animation != null) {
+            animation.nextFrame
+            animation.nextFrame
+          }
+      }
+      if (path.tail != Nil && path.head != targloc) {
+        val curr = path.head
+        val next = path.tail.head
+        val dir = curr.direction(next)
+        xoffs = ((next._1 - curr._1) - (next._2 - curr._2)) * terrwdt / 2 * offset / 6 - 47
+        yoffs = ((next._1 - curr._1) + (next._2 - curr._2)) * terrhgt / 2 * offset / 6 - 47
+        if (animation == null || dir != lastdir) animation = ImageLoader.loopedAni("sage_" + dir.abbrev + ".png", 1)
+        lastdir = dir
+      } else {
+        releaseLock
+        end = true
+      }
+    }
+    override def reset = path = completepath; offset = 0; end = false; animation = null; releaseLock
+    override def hasNext = !end
+    def location = path.head
+    def isAboveObjects = false
+    def copy = new MovementDrawer(Nil, (0, 0))
+  }
+  
+  private def mvDrawer(params: Array[Value], res: OpResult) = {
+    val spl = res.infomap("Target").split(',')
+    val target = (spl(0).toInt, spl(1).toInt)
+    params(0) match {
+      case Path(nodes) => Some(new MovementDrawer(nodes, target))
+      case _ => throw new IllegalArgumentException("First parameter should be a Path.")
+    }
+  }
+  
+  def name = "Sage"
+  def effectDrawerFor(e: Event) = e match {
+    case InstanceActionInvokedEvent(inst, actname, params, res, loc) if (actname == "Move") => mvDrawer(params, res)
+    case _ => None
+  }
+  def boundingbox = ((-47, -47), (25, 17))
+  def copy = new SageDrawer
+}
+
+
+
+
+
+
+
+
+
+
+

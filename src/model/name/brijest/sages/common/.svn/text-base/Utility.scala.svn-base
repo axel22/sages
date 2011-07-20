@@ -1,0 +1,15 @@
+package name.brijest.sages.common
+
+
+import java.io.File
+
+
+/**
+ * A utility class.
+ */
+object Utility {
+  
+  def currentDir = System.getProperty("user.dir")
+  def elementsDir = currentDir + File.separator + "plugins" + File.separator + "elements"
+  
+}

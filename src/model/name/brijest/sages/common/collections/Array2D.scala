@@ -1,0 +1,23 @@
+package name.brijest.sages.common.collections
+
+
+
+
+/**
+ * A two dimensional array.
+ */
+class Array2D[T](private var w: Int, private var h: Int)(implicit m: Manifest[T]) extends Iterable[T] {
+  private var arr = new Array[T](w * h)
+  def width = w
+  def height = h
+  def resize(wdt: Int, hgt: Int) {
+    w = wdt
+    h = hgt
+    arr = new Array[T](w * h)
+  }
+  def apply(x: Int, y: Int) = arr(y * w + x)
+  def put(x: Int, y: Int, t: T) = arr(y * w + x) = t
+  def put(p: (Int, Int), t: T): Unit = put(p._1, p._2, t)
+  def clear = for (x <- 0 until w; y <- 0 until h) arr(y * w + x) = null.asInstanceOf[T]
+  def iterator = arr.iterator
+}

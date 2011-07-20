@@ -1,0 +1,90 @@
+package name.brijest.sages.model
+
+import java.io.File
+import java.io.FileInputStream
+import java.util.jar.JarInputStream
+import java.net.URL
+import java.net.URLClassLoader
+
+import name.brijest.sages.gui.TerrainDrawer
+import name.brijest.sages.gui.ObjectDrawer
+import name.brijest.sages.gui.TerrainDrawerPalette
+import name.brijest.sages.gui.ObjectDrawerPalette
+import name.brijest.sages.model.objects.ObjectHolder
+import name.brijest.sages.model.objects.ObjectDrawerHolder
+
+
+object DynamicLoader extends URLClassLoader(new Array[java.net.URL](0)) with ObjectHolder with ObjectDrawerHolder {
+  protected override def addURL(url: URL) = super.addURL(url)
+  val terrainpal = new TerrainPalette
+  val questfactory = new QuestFactory
+  val categoryfactory = new CategoryFactory
+  val terraindrawerpal = new TerrainDrawerPalette
+  
+  private def handleLoading(cls: Class[_], tpal: TerrainPalette, opal:ObjectPalette,
+                            qfact: QuestFactory, catfact: CategoryFactory,
+                            tdrawpal: TerrainDrawerPalette, odrawpal: ObjectDrawerPalette) {
+    if (classOf[Terrain].isAssignableFrom(cls)) {
+      // terrain
+      tpal.registerTerrain(cls)
+    } else if (classOf[name.brijest.sages.model.Object].isAssignableFrom(cls)) {
+      // object
+      opal.registerObject(cls)
+    } else if (classOf[Quest].isAssignableFrom(cls)) {
+      // quest type
+      qfact.registerQuest(cls)
+    } else if (classOf[Category].isAssignableFrom(cls)) {
+      // category
+      catfact.registerCategory(cls)
+    } else if (classOf[TerrainDrawer].isAssignableFrom(cls)) {
+      // terrain drawer
+      tdrawpal.registerDrawer(cls)
+    } else if (classOf[ObjectDrawer].isAssignableFrom(cls)) {
+      // object drawer
+      odrawpal.registerDrawer(cls)
+    } else {
+      //println("could not register: " + cls)
+    }
+  }
+  
+  private def loadElementPlugin(pluginpath: File, tpal: TerrainPalette, opal:ObjectPalette,
+                                qfact: QuestFactory, catfact: CategoryFactory,
+                                tdrawpal: TerrainDrawerPalette, odrawpal: ObjectDrawerPalette) {
+    addURL(pluginpath.toURI.toURL)
+    val pluginstream = new JarInputStream(new FileInputStream(pluginpath))
+    var entry = pluginstream.getNextJarEntry
+    while (entry != null) {
+      if (!entry.isDirectory && entry.getName.endsWith(".class")) {
+        val name = entry.getName
+        val javaname = name.substring(0, name.length - 6).replace('/', '.')
+        val cls = loadClass(javaname)
+        handleLoading(cls, tpal, opal, qfact, catfact, tdrawpal, odrawpal)
+      } else if (!entry.isDirectory) {
+      }
+      entry = pluginstream.getNextJarEntry
+    }
+  }
+  
+  def loadElements(elems: File) = {
+    if (elems.isDirectory) for (file <- elems.listFiles) {
+      loadElementPlugin(file, terrainpal, objpal, questfactory, categoryfactory, terraindrawerpal, objdrawerpal)
+    } else loadElementPlugin(elems, terrainpal, objpal, questfactory, 
+                             categoryfactory, terraindrawerpal, objdrawerpal)
+    (terrainpal, objpal, questfactory, categoryfactory, terraindrawerpal, objdrawerpal)
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

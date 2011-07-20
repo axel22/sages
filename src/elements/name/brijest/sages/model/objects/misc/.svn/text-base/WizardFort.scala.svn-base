@@ -1,0 +1,36 @@
+package name.brijest.sages.model.objects.misc
+
+import name.brijest.sages.model.objects.NonListening
+import name.brijest.sages.model.Object
+import name.brijest.sages.gui.AnimatedObjectDrawer
+import name.brijest.sages.model.Event
+import name.brijest.sages.model.RemoveInstanceEvent
+import name.brijest.sages.gui.AnimatedObjectDrawer
+
+
+class WizardFort extends Object with NonListening {
+  def objectname = "Wizard's fort"
+  def nicename = "Wizard's fort"
+  def size = (3, 3)
+  def interactive = List((2, 1))
+  def interact(thisloc: (Int, Int), that: Object, thatloc: (Int, Int)) = null
+}
+
+
+class WizardFortDrawer
+extends AnimatedObjectDrawer(-140, -140, ObjectImageCacher.
+                               singleFrameAni(classOf[WizardFort], "wizard.png")) {
+  def name = "Wizard's fort"
+  def boundingbox = ((-140, -140), (56, 56))
+  def copy = new WizardFortDrawer
+  def effectDrawerFor(e: Event) = None
+  override def helper(name: String) = None
+}
+
+
+
+
+
+
+
+

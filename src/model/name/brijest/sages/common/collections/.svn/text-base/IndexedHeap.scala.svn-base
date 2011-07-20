@@ -1,0 +1,57 @@
+package name.brijest.sages.common.collections
+
+
+import scala.collection._
+
+
+/**
+ * Contains elements of type T their cost of type C - the value according to which they are sorted.
+ * It allows constant time fetching of elements, constant time fetching of elements with the
+ * lowest and highest cost, and logarithmic time insertion, update and deletion.
+ */
+class IndexedHeap[T, C](implicit ord: T => Ordered[T], implicit val cord: C => Ordered[C]) extends mutable.Map[T, C] {
+  private var tree = new immutable.TreeSet[(C, T)]
+  private val map = new mutable.HashMap[T, C]
+  
+  def -=(elem: T) = (map.get(elem): @unchecked) match {
+    case Some(c) =>
+      tree -= (c, elem)
+      map.removeKey(elem)
+  }
+  def update(elem: T, cost: C) = map.get(elem) match {
+    case Some(c) =>
+      tree -= (c, elem)
+      tree += (cost, elem)
+      map.put(elem, cost)
+    case None =>
+      map.put(elem, cost)
+      tree += (cost, elem)
+  }
+  def get(element: T) = map.get(element)
+  def size = map.size
+  def elements = map.elements
+  def first = tree.firstKey
+  def last = tree.lastKey
+  def removeFirst = {
+    val f = first
+    tree -= f
+    map.removeKey(f._2)
+    f
+  }
+  def removeLast = {
+    val l = last
+    tree -= l
+    map.removeKey(l._2)
+    l
+  }
+}
+
+
+
+
+
+
+
+
+
+

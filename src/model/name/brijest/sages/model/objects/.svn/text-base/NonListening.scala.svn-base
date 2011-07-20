@@ -1,0 +1,9 @@
+package name.brijest.sages.model.objects
+
+
+
+
+trait NonListening {
+  def events = Nil
+  def onEvent(e: Event) {}
+}
